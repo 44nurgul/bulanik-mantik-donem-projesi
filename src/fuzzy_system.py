@@ -47,10 +47,10 @@ RULES = [
 ]
 
 
-def _degree(labels, x, var):
-    """Bir girdinin 'labels' içindeki kümelerden en yüksek üyeliği (VEYA = max)."""
+def _memberships(x, var):
+    """Bir girdinin Low/Middle/High üyelik dereceleri (her değişken için bir kez hesaplanır)."""
     r, s, t = MF_PARAMS[var]
-    return np.max([MF[lab](x, r, s, t) for lab in labels], axis=0)
+    return {lab: f(x, r, s, t) for lab, f in MF.items()}
 
 
 def influence(er, ds, bw):
@@ -58,14 +58,23 @@ def influence(er, ds, bw):
     er, ds, bw = (np.atleast_1d(np.asarray(a, dtype=float)) for a in (er, ds, bw))
     y = np.linspace(0.0, 1.0, CENTROID_POINTS)           # çıktı evreni
     r, s, t = MF_PARAMS["OUT"]
-    out_mf = {k: f(y, r, s, t) for k, f in MF.items()}   # çıktı kümeleri (101,)
+    mu = {"BW": _memberships(bw, "BW"), "DS": _memberships(ds, "DS"), "ER": _memberships(er, "ER")}
 
-    aggregated = np.zeros((er.size, y.size))
+    def degree(labels, var):
+        """Kural içi VEYA = max: listedeki kümelerin en yüksek üyeliği."""
+        return max(mu[var][lab] for lab in labels) if len(labels) == 1 else np.max([mu[var][lab] for lab in labels], axis=0)
+
+    # Her kuralın ateşleme gücü: VE = çarpım. Aynı çıktı kümesine giden kuralların
+    # gücü max ile birleşir (min-kırpma + max-birleştirme sonucu bununla aynıdır).
+    power = {"L": np.zeros(er.size), "M": np.zeros(er.size), "H": np.zeros(er.size)}
     for bw_l, ds_l, er_l, out_l in RULES:
-        # VE operatörü = çarpım
-        w = _degree(bw_l, bw, "BW") * _degree(ds_l, ds, "DS") * _degree(er_l, er, "ER")
-        # implikasyon = min (kırpma), birleştirme = max
-        aggregated = np.maximum(aggregated, np.minimum(w[:, None], out_mf[out_l][None, :]))
+        w = degree(bw_l, "BW") * degree(ds_l, "DS") * degree(er_l, "ER")
+        power[out_l] = np.maximum(power[out_l], w)
+
+    # Çıktı kümelerini kendi güçlerinde kırp (min) ve üst üste koy (max)
+    aggregated = np.zeros((er.size, y.size))
+    for out_l, w in power.items():
+        aggregated = np.maximum(aggregated, np.minimum(w[:, None], MF[out_l](y, r, s, t)[None, :]))
 
     area = aggregated.sum(axis=1)
     # Centroid. Hiçbir kural ateşlenmediyse (kural tabanında boşluk) etki 0 kabul edilir.
