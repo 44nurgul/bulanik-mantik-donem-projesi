@@ -1,0 +1,4 @@
+Aday,ER,DS,BW,Etki katsayısı,Seçilme olasılığı
+"A: enerji yüksek, yakın, geniş bant",0.9,0.2,0.9,0.808,53.9%
+"B: enerji orta, orta uzaklık, orta bant",0.5,0.5,0.5,0.5,33.3%
+"C: enerji düşük, uzak, dar bant",0.15,0.85,0.2,0.192,12.8%

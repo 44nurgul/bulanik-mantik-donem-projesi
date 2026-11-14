@@ -1,0 +1,9 @@
+Senaryo,ER,DS,BW,Etki katsayısı,Ateşlenen kurallar
+"En iyi aday: enerji dolu, yakın, geniş bant",1.0,0.0,1.0,0.808,K9 (1.00)
+"En kötü aday: enerji bitik, uzak, dar bant",0.0,1.0,0.0,0.192,K3 (1.00)
+Her şey orta,0.5,0.5,0.5,0.5,K6 (1.00)
+Enerji dolu ama bant dar,1.0,0.2,0.1,0.5,K4 (1.00)
+Enerji bitik ama yakın ve geniş bant,0.1,0.1,0.9,0.5,K2 (1.00)
+"Çelişkili kural bölgesi: BW=Y, DS=Y, ER=O (K8 / K11)",0.5,1.0,1.0,0.693,"K11 (1.00), K8 (1.00)"
+"Çelişkili kural bölgesi: BW=O, DS=Y, ER=Y (K7 / K12)",1.0,1.0,0.5,0.307,"K12 (1.00), K7 (1.00)"
+Geçiş bölgesi (üyelikler karışık),0.4,0.6,0.3,0.389,"K6 (0.29), K7 (0.19)"
