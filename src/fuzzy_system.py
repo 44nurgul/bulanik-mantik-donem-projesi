@@ -3,11 +3,12 @@
 Girdiler : ER (kalan enerji), DS (mesafe), BW (bant genişliği), hepsi [0,1] normalize
 Çıktı    : etki katsayısı [0,1]
 Çıkarım  : kural içi VEYA = max, girdiler arası VE = çarpım (makale),
-           implikasyon = min (varsayım), birleştirme = max, durulaştırma = centroid
+           implikasyon = min (varsayım), birleştirme = max, durulaştırma = centroid (baseline)
+           veya bisector / MOM / ağırlıklı ortalama (katkı, bkz. influence)
 """
 import numpy as np
 
-from config import MF_PARAMS, CENTROID_POINTS
+from config import MF_PARAMS, CENTROID_POINTS, SUGENO_CENTERS
 
 
 # ------------------------------------------------------------ Üyelik fonksiyonları
@@ -53,8 +54,20 @@ def _memberships(x, var):
     return {lab: f(x, r, s, t) for lab, f in MF.items()}
 
 
-def influence(er, ds, bw):
-    """Aday düğümler için etki katsayısı. er, ds, bw: aynı uzunlukta [0,1] dizileri."""
+# Durulaştırma yöntemleri (Karar 26-28). "centroid" makalenin yöntemi (baseline), diğerleri katkımız.
+METHODS = ("centroid", "bisector", "mom", "wavg")
+
+
+def influence(er, ds, bw, method="centroid"):
+    """Aday düğümler için etki katsayısı. er, ds, bw: aynı uzunlukta [0,1] dizileri.
+
+    method:
+      "centroid": kırpılmış şeklin ağırlık merkezi (makale, baseline)
+      "bisector": şeklin alanını ikiye bölen nokta
+      "mom"     : şeklin tepe değerine ulaştığı noktaların ortalaması (mean of maximum)
+      "wavg"    : her kuralın gücü x sabit merkezi (Low=0, Mid=0.5, High=1) toplamı / güç toplamı.
+                  Bu, sıfırıncı derece Sugeno'ya denktir (kural sonuçları sabit sayılar).
+    """
     er, ds, bw = (np.atleast_1d(np.asarray(a, dtype=float)) for a in (er, ds, bw))
     y = np.linspace(0.0, 1.0, CENTROID_POINTS)           # çıktı evreni
     r, s, t = MF_PARAMS["OUT"]
@@ -67,9 +80,17 @@ def influence(er, ds, bw):
     # Her kuralın ateşleme gücü: VE = çarpım. Aynı çıktı kümesine giden kuralların
     # gücü max ile birleşir (min-kırpma + max-birleştirme sonucu bununla aynıdır).
     power = {"L": np.zeros(er.size), "M": np.zeros(er.size), "H": np.zeros(er.size)}
+    rule_power = []                                      # her kuralın kendi gücü (wavg için)
     for bw_l, ds_l, er_l, out_l in RULES:
         w = degree(bw_l, "BW") * degree(ds_l, "DS") * degree(er_l, "ER")
+        rule_power.append((w, out_l))
         power[out_l] = np.maximum(power[out_l], w)
+
+    if method == "wavg":
+        # Sugeno-0: her kuralın sonucu sabit bir merkez, çıktı güçlerin ağırlıklı ortalaması
+        total = sum(w for w, _ in rule_power)
+        weighted = sum(w * SUGENO_CENTERS[out_l] for w, out_l in rule_power)
+        return np.where(total > 0, weighted / np.where(total > 0, total, 1), 0.0)
 
     # Çıktı kümelerini kendi güçlerinde kırp (min) ve üst üste koy (max)
     aggregated = np.zeros((er.size, y.size))
@@ -77,5 +98,14 @@ def influence(er, ds, bw):
         aggregated = np.maximum(aggregated, np.minimum(w[:, None], MF[out_l](y, r, s, t)[None, :]))
 
     area = aggregated.sum(axis=1)
-    # Centroid. Hiçbir kural ateşlenmediyse (kural tabanında boşluk) etki 0 kabul edilir.
-    return np.where(area > 0, (aggregated * y).sum(axis=1) / np.where(area > 0, area, 1), 0.0)
+    fired = area > 0                                     # hiçbir kural ateşlenmediyse etki 0 kabul edilir
+    if method == "centroid":
+        return np.where(fired, (aggregated * y).sum(axis=1) / np.where(fired, area, 1), 0.0)
+    if method == "bisector":
+        cum = np.cumsum(aggregated, axis=1)
+        idx = (cum >= (area / 2.0)[:, None]).argmax(axis=1)   # alanın yarısına ilk ulaşılan nokta
+        return np.where(fired, y[idx], 0.0)
+    if method == "mom":
+        at_max = aggregated >= (aggregated.max(axis=1) - 1e-12)[:, None]
+        return np.where(fired, (at_max * y).sum(axis=1) / at_max.sum(axis=1), 0.0)
+    raise ValueError(f"bilinmeyen durulaştırma yöntemi: {method}")

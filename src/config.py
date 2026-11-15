@@ -21,7 +21,7 @@ EPS_FS = 100e-12         # [Makale] J/bit/m^2  (d < d0 için d^2 kolu)
 EPS_MP = 100e-12         # [Makale] J/bit/m^4  (d >= d0 kolu; menzil 30 m olduğundan tetiklenmez)
 P_SENSE = 0.5            # [Makale] W
 P_PROC = 0.3             # [Makale] W
-T_SENSE = 10e-3          # [VARSAYIM] s. Makale 1 s diyor ama bu 2-3 istekte ağı öldürür (Karar 25)
+T_SENSE = 10e-3          # [VARSAYIM] s. Makale 1 s diyor ama bu 2-3 istekte ağı öldürür 
 T_PROC = 10e-3           # [VARSAYIM] s. Aynı gerekçe
 
 # ---------------------------------------------------------------- Bulanık sistem
@@ -34,6 +34,9 @@ MF_PARAMS = {
     "OUT": (0.25, 0.5, 0.75),
 }
 CENTROID_POINTS = 101    # [VARSAYIM] durulaştırma için [0,1] aralığındaki nokta sayısı
+# Ağırlıklı ortalama (sıfırıncı derece Sugeno) için çıktı kümelerinin sabit merkezleri.
+# [VARSAYIM] Karar 28: evrenin uçları ve orta noktası.
+SUGENO_CENTERS = {"L": 0.0, "M": 0.5, "H": 1.0}
 
 # ---------------------------------------------------------------- Deney
 SEEDS = list(range(30))  # [VARSAYIM] 30 tekrar, seed 0-29
