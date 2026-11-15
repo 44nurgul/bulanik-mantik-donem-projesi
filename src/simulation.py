@@ -5,6 +5,7 @@ Yöntemler:
   "ospf"  -> klasik OSPF (1/BW maliyetli en kısa yol, Dijkstra)      [referans]
 """
 import heapq
+import time
 
 import numpy as np
 
@@ -27,8 +28,19 @@ def e_tx(d):
 
 
 # ------------------------------------------------------------ Yönlendirme
-def fuzzy_path(net, src, alive, energy, rng, ds_max):
-    """Bulanık rulet yönlendirme (makalenin Şekil 5'i). (yol, hedefe_vardı_mı) döner."""
+HIST_BINS = 20                                                   # puan histogramı: [0,1] aralığında 20 dilim
+
+
+def new_stats():
+    """Hipotezi göstermek için tutulan ölçümler: puan dağılımı, sıfır puanlılar, süre."""
+    return {"calls": 0, "time": 0.0, "hist": np.zeros(HIST_BINS, dtype=np.int64),
+            "min": np.inf, "max": -np.inf, "cands": 0, "zero_cands": 0, "all_zero": 0}
+
+
+def fuzzy_path(net, src, alive, energy, rng, ds_max, defuzz="centroid", stats=None):
+    """Bulanık rulet yönlendirme (makalenin Şekil 5'i). (yol, hedefe_vardı_mı) döner.
+
+    defuzz: durulaştırma yöntemi (centroid = makale). stats: puan ve süre ölçümleri için sözlük."""
     path, cur, visited = [src], src, {src}
     while cur != net.sink and len(path) <= C.TTL:
         if net.adj[cur, net.sink]:                               # SIU menzildeyse doğrudan teslim (Karar 24)
@@ -41,7 +53,17 @@ def fuzzy_path(net, src, alive, energy, rng, ds_max):
         er = np.minimum(energy[cand] / C.E0, 1.0)                # SIU'nun enerjisi sınırsız -> 1
         ds = (net.dist[cand, cur] + net.dist[cand, net.sink]) / 2.0 / ds_max
         bw = net.bw[cur, cand] / C.BW_MAX
-        w = influence(er, np.minimum(ds, 1.0), bw)
+        t0 = time.perf_counter()
+        w = influence(er, np.minimum(ds, 1.0), bw, defuzz)
+        if stats is not None:
+            stats["time"] += time.perf_counter() - t0
+            stats["calls"] += 1
+            stats["hist"] += np.histogram(w, bins=HIST_BINS, range=(0.0, 1.0))[0]
+            stats["min"], stats["max"] = min(stats["min"], w.min()), max(stats["max"], w.max())
+            stats["cands"] += w.size
+            stats["zero_cands"] += int((w == 0).sum())
+            stats["all_zero"] += int(w.sum() == 0)
+        # Tüm adayların puanı 0 ise yedek kural: eşit olasılıklı seçim (sayılır)
         p = w / w.sum() if w.sum() > 0 else np.full(cand.size, 1.0 / cand.size)
         nxt = int(rng.choice(cand, p=p))                         # rulet seçimi
         path.append(nxt)
@@ -80,7 +102,10 @@ def ospf_path(net, src, nxt):
 
 
 # ------------------------------------------------------------ Bir koşu
-def run(seed, method, record_every=100):
+def run(seed, method, defuzz="centroid", record_every=100):
+    """method: "fuzzy" veya "ospf". defuzz yalnızca "fuzzy" için kullanılır."""
+    t_start = time.perf_counter()
+    stats = new_stats() if method == "fuzzy" else None
     net = Network(seed)
     n = C.N_NODES
     alive = np.ones(n + 1, dtype=bool)
@@ -105,7 +130,7 @@ def run(seed, method, record_every=100):
                 nxt, dirty = dijkstra_next_hop(net, alive), False
             path, reached = ospf_path(net, src, nxt)
         else:
-            path, reached = fuzzy_path(net, src, alive, energy, route_rng, ds_max)
+            path, reached = fuzzy_path(net, src, alive, energy, route_rng, ds_max, defuzz, stats)
 
         # Enerji harcaması: yol boyunca. Yolda düğüm ölürse paket kaybolur.
         def charge(i, amount):
@@ -147,4 +172,14 @@ def run(seed, method, record_every=100):
         "pdr": 100.0 * delivered / max(sent, 1),
         "avg_hops": float(np.mean(hops)) if hops else float("nan"),
         "series": series,
+        "defuzz": defuzz if method == "fuzzy" else "-",
+        "run_time_s": time.perf_counter() - t_start,
+        # Puan dağılımı ve süre (yalnızca bulanık yöntem)
+        "score_min": float(stats["min"]) if stats and stats["calls"] else float("nan"),
+        "score_max": float(stats["max"]) if stats and stats["calls"] else float("nan"),
+        "score_hist": stats["hist"].tolist() if stats else None,
+        "zero_score_frac": stats["zero_cands"] / stats["cands"] if stats and stats["cands"] else float("nan"),
+        "all_zero_events": stats["all_zero"] if stats else 0,
+        "score_calls": stats["calls"] if stats else 0,
+        "score_time_us": 1e6 * stats["time"] / stats["calls"] if stats and stats["calls"] else float("nan"),
     }
