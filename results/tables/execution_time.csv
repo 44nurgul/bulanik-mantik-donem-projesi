@@ -1,0 +1,5 @@
+Yöntem,"Medyan (µs/çağrı, 20 aday)",Min,Max
+Centroid (baseline),127,126,127
+Bisector,133,133,135
+MOM,134,134,134
+Ağırlıklı ort. (Sugeno-0),114,114,114
