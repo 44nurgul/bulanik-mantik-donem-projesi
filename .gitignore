@@ -1,7 +1,11 @@
+# Python tarafından otomatik üretilen dosyalar
 __pycache__/
 *.pyc
-.ipynb_checkpoints/
+
+# Sanal ortam (requirements.txt ile yeniden kurulabilir)
 .venv/
 venv/
-*.log
-.DS_Store
+
+# Word / PowerPoint / LibreOffice'in dosya açıkken oluşturduğu geçici dosyalar
+.~lock.*
+~$*
